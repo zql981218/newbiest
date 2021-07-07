@@ -651,5 +651,14 @@ databaseChangeLog:
       file: db.changelog-add.GCRawMaterialStockInChange.nb_authority.yaml
       relativeToChangelogFile: true
   - include:
+      file: db.changelog-add.WltLotPackCaseCheck.nb_authority.yaml
+      relativeToChangelogFile: true
+  - include:
       file: db.changelog-add.RwMaterialCancelSpare.nb_authority.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: db.changelog-add.WaferHoldRelation.nb_authority.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: db.changelog-add.MobileWltCPLotStockIn.nb_authority.yaml
       relativeToChangelogFile: true
