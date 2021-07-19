@@ -1464,7 +1464,7 @@ public class GcServiceImpl implements GcService {
             }
 
             //RW的来料发料之后自动打印RW发料标签
-            List<MaterialLot> rwMaterialLots = materialLots.stream().filter(materialLot -> !StringUtils.isNullOrEmpty(materialLot.getInnerLotId()) && MaterialLot.SCP_WAFER_SOURCE.equals(materialLot.getReserved50())).collect(Collectors.toList());
+            List<MaterialLot> rwMaterialLots = materialLots.stream().filter(materialLot -> !StringUtils.isNullOrEmpty(materialLot.getInnerLotId()) && MaterialLot.RW_TO_CP_WAFER_SOURCE.equals(materialLot.getReserved50())).collect(Collectors.toList());
             printService.printRwLotIssueLabel(rwMaterialLots, "");
 
             //将晶圆信息保存至Mes backendWaferReceive表中
@@ -7097,6 +7097,42 @@ public class GcServiceImpl implements GcService {
     }
 
     /**
+     * RW属性转换
+     * @param materialLots
+     * @throws ClientException
+     */
+    @Override
+    public void rWAttributeChange(List<MaterialLot> materialLots) throws ClientException {
+        try {
+            for(MaterialLot materialLot : materialLots){
+                String waferSource = materialLot.getReserved50();
+                if (!StringUtils.isNullOrEmpty(waferSource)){
+                    if (MaterialLot.RW_TO_CP_WAFER_SOURCE.equals(waferSource)) {
+                        materialLot.setReserved50(MaterialLot.SCP_WAFER_SOURCE);
+                    }else if (MaterialLot.SCP_WAFER_SOURCE.equals(waferSource)){
+                        materialLot.setReserved50(MaterialLot.RW_TO_CP_WAFER_SOURCE);
+                    }
+
+                    materialLot = materialLotRepository.saveAndFlush(materialLot);
+                    MaterialLotHistory history = (MaterialLotHistory) baseService.buildHistoryBean(materialLot, MaterialLotHistory.TRANS_TYPE_WAFER_SOURCE_UPDATE);
+                    materialLotHistoryRepository.save(history);
+
+                    List<MaterialLotUnit> materialLotUnitList = materialLotUnitService.getUnitsByMaterialLotId(materialLot.getMaterialLotId());
+                    for(MaterialLotUnit materialLotUnit : materialLotUnitList){
+                        materialLotUnit.setReserved50(materialLot.getReserved50());
+                        materialLotUnit = materialLotUnitRepository.saveAndFlush(materialLotUnit);
+                        MaterialLotUnitHistory materialLotUnitHistory = (MaterialLotUnitHistory) baseService.buildHistoryBean(materialLotUnit, MaterialLotHistory.TRANS_TYPE_WAFER_SOURCE_UPDATE);
+                        materialLotUnitHisRepository.save(materialLotUnitHistory);
+                    }
+
+                }
+            }
+        } catch (Exception e) {
+            throw ExceptionManager.handleException(e, log);
+        }
+    }
+
+    /**
      * 验证物料信息是否匹配存在批次单据，并且数量足够
      * @param materialInfo
      * @param materialLotMap
@@ -8331,6 +8367,13 @@ public class GcServiceImpl implements GcService {
                 if(CollectionUtils.isNotEmpty(materialLots)){
                     throw new ClientParameterException(GcExceptions.IRA_RAW_MATERIAL_BOX_ID_CANNOT_EMPTY, materialLots.get(0).getMaterialLotId());
                 } else {
+                    Map<String, List<MaterialLot>> materialNameMap = materialLotList.stream().collect(Collectors.groupingBy(MaterialLot::getMaterialName));
+                    for (String materialName : materialNameMap.keySet()) {
+                        List<MaterialLot> mLotList =  materialNameMap.get(materialName).stream().filter(materialLot -> !materialLot.getMaterialLotId().startsWith(materialName)).collect(Collectors.toList());
+                        if (CollectionUtils.isNotEmpty(mLotList)){
+                            throw new ClientParameterException(GcExceptions.MATERIAL_TYPE_AND_MATERIAL_LOT_IS_NOT_SAME);
+                        }
+                    }
                     Map<String, List<MaterialLot>> materialLotMap = materialLotList.stream().collect(Collectors.groupingBy(MaterialLot::getLotId));
                     for(String lotId : materialLotMap.keySet()){
                         if(!lotId.startsWith(Material.IRA_MATERIAL_BOX_ID_START)){
@@ -9623,6 +9666,7 @@ public class GcServiceImpl implements GcService {
     private void saveMaterialLotTaggingInfoAndSaveHis(MaterialLot materialLot, String customerName, String abbreviation, String remarks) throws ClientException{
         try {
             materialLot.setCustomerId(customerName);
+            materialLot.setReserved54(MaterialLot.STOCKOUT_TYPE_4);
             materialLot.setReserved55(abbreviation);
             materialLot.setReserved57(remarks);
             materialLot = materialLotRepository.saveAndFlush(materialLot);
@@ -9897,7 +9941,7 @@ public class GcServiceImpl implements GcService {
                 throw new ClientParameterException(MM_RAW_MATERIAL_IS_NOT_EXIST, bladeMaterialCode);
             }
             materialLot.setMaterial(material);
-            materialLot.setCurrentQty(BigDecimal.ONE);
+            materialLot.setCurrentQty(BigDecimal.TEN);
             materialLot.setCurrentSubQty(BigDecimal.ONE);
             materialLot.setStatusCategory(MaterialStatus.STATUS_CREATE);
             materialLot.setStatus(MaterialStatus.STATUS_CREATE);
@@ -9918,15 +9962,14 @@ public class GcServiceImpl implements GcService {
      */
     public String validateAndGetBladeMLotId(String bladeMaterialLotCode) throws ClientException{
         try {
-            if(bladeMaterialLotCode.length() < 16){
+            if(bladeMaterialLotCode.length() < 15){
                 throw new ClientParameterException(GcExceptions.BLADE_MATERIAL_CODE_IS_ERROR, bladeMaterialLotCode);
             }
-            String materialLotId = bladeMaterialLotCode.substring(bladeMaterialLotCode.length() - 15, bladeMaterialLotCode.length()-1);
-            MaterialLot materialLot = materialLotRepository.findByMaterialLotIdAndOrgRrn(materialLotId, ThreadLocalContext.getOrgRrn());
+            MaterialLot materialLot = materialLotRepository.findByMaterialLotIdAndOrgRrn(bladeMaterialLotCode, ThreadLocalContext.getOrgRrn());
             if(materialLot != null){
-                throw new ClientParameterException(MmsException.MM_MATERIAL_LOT_IS_EXIST, materialLotId);
+                throw new ClientParameterException(MmsException.MM_MATERIAL_LOT_IS_EXIST, bladeMaterialLotCode);
             }
-            return materialLotId;
+            return bladeMaterialLotCode;
         }catch (Exception e) {
             throw ExceptionManager.handleException(e, log);
         }
