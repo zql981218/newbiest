@@ -46,6 +46,11 @@ public class MaterialLot extends NBUpdatable implements StatusLifeCycle{
     public static final String GENERATOR_MATERIAL_LOT_WEIGHT_RULE = "BoxsWeight";
 
     /**
+     * 生成多箱称重事物号规则
+     */
+    public static final String GENERATOR_RAW_MATERIAL_SPARE_RULE = "RawMaterialSpare";
+
+    /**
      * 生成物料子批号的规则
      */
     public static final String GENERATOR_SUB_MATERIAL_LOT_ID_RULE = "CreateSubMLot";
@@ -130,6 +135,9 @@ public class MaterialLot extends NBUpdatable implements StatusLifeCycle{
     public static final String RW_MLOT_SCRAP_AND_SHIP_VALIDATE_RULE_ID = "RwMaterialScrapShipDocRule";  //原材料报废出库单据验证规则
     public static final String WLT_OTHER_STOCK_OUT_RULE_ID = "WltOtherStockOutRule";  //WLT/CP其它出单据验证规则
     public static final String MOBILE_RAW_ISSUE_WHERE_CLAUSE="GCRawMaterialIssueOrder";
+    public static final String MOBILE_RETEST_WHERE_CLAUSE = "GCReTestManager";
+    public static final String MOBILE_WLT_OR_CP_STOCK_OUT_ORDER_WHERE_CLAUSE = "GCWltOrCpStockOutOrder";
+    public static final String MOBILE_COM_WAFER_ISSUE_MANAGER_WHERE_CLAUSE = "GCCOMWaferIssueManager";
 
     /**
      * 香港仓依订单出货
@@ -1016,6 +1024,9 @@ public class MaterialLot extends NBUpdatable implements StatusLifeCycle{
 
     @Transient
     private String tapeMaterialCode;
+
+    @Transient
+    private String treasuryNote;
 
     /**
      * 验证物料批次是否在有效期内
