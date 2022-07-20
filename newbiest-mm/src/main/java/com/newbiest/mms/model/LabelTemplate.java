@@ -32,9 +32,11 @@ public class LabelTemplate extends NBBase {
     public static final String PRINT_CUSTOMER_NAME_LABEL = "PrintCusNameLabel";//COM装箱客户标签打印
     public static final String PRINT_RW_CST_BOX_LABEL = "PrintRwCstBoxLabel";//RW的CST标签打印
     public static final String PRINT_COM_VBOX_LABEL = "PrintComVBoxLabel";//COM的VBOX标签打印
+    public static final String PRINT_FT_VBOX_LABEL = "PrintFtVBoxLabel";//FT/COG  VBOX标签打印
     public static final String PRINT_RW_STOCK_OUT_LABEL = "PrintRWStockOutLabel";//RW出货标签打印
     public static final String PRINT_QR_CODE_LABEL = "PrintBoxQRCode";//二维码标签打印
     public static final String PRINT_WLT_BBOX_LABEL = "PrintWltBboxLabel";//WLT来料晶圆箱标签打印
+    public static final String PRINT_WAFER_LABEL = "PrintWaferLabel";//来料晶圆箱标签打印
     public static final String PRINT_RMA_BOX_LABEL = "PrintRMABoxLabel";//RMA来料接收箱标签打印
     public static final String PRINT_RW_LOT_ISSUE_LABEL = "PrintRwLotIdIssueLabel";//RW发料箱标签打印
     public static final String PRINT_IR_LABEL = "PrintIRLabel";//IR单包标签打印
@@ -42,6 +44,8 @@ public class LabelTemplate extends NBBase {
     public static final String PRINT_IRA_BOX_LABEL = "PrintIRABoxLabel";//IR箱号标签打印
     public static final String PRINT_WAFER_LOT_LABEL = "PrintWaferLotLabel";//wafer拆箱箱号标签打印
     public static final String PRINT_RW_BOX_LABEL = "PrintRwBoxLabel"; //RW出货箱标签打印
+    public static final String PRINT_SAMSUNG_OUTER_BOX_LABEL = "PrintSamsungOuterBoxLabel";//三星外箱标签
+    public static final String PRINT_LCD_BBOX_LABEL = "PrintLCDBBoxLabel";//LCD箱标签
 
     //物料编码打印相关
     public static final String PRINT_OPHELION_MLOT_LABEL = "PrintOphelionMLotLabel";//欧菲光

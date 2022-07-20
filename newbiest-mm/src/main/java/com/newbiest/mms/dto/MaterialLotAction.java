@@ -2,6 +2,8 @@ package com.newbiest.mms.dto;
 
 import com.newbiest.base.dto.Action;
 import com.newbiest.commom.sm.model.StatusModel;
+import com.newbiest.mms.model.Storage;
+import com.newbiest.mms.model.Warehouse;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -32,6 +34,11 @@ public class MaterialLotAction extends Action {
      * 入库备注
      */
     private String reserved4;
+
+    /**
+     * 重置库位号
+     */
+    private String resetStorageId;
 
     /**
      * 来源仓库主键
@@ -96,6 +103,25 @@ public class MaterialLotAction extends Action {
      * RW退料入库标记
      */
     private String workOrderId;
+
+    /**
+     * 箱子包装初始化状态
+     */
+    private String boxStatusUseFlag;
+
+    /**
+     * COB导入自动装箱
+     */
+    private String cobImportPack;
+
+    /**
+     * 操作人
+     */
+    private String transUser;
+
+    private Storage storage;
+
+    private Warehouse warehouse;
 
     public MaterialLotAction(){
     }

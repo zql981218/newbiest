@@ -51,10 +51,15 @@ public class IncomingMaterialSaveController {
         String checkFourCodeFlag = requestBody.getCheckFourCodeFlag();
 
         String importCode = "";
-        if(MaterialLotUnit.COB_FINISH_PRODUCT.equals(importType) || MaterialLotUnit.SOC_FINISH_PRODUCT.equals(importType) || MaterialLotUnit.COB_RAW_MATERIAL_PRODUCT.equals(importType)){
+        if(MaterialLotUnit.SOC_FINISH_PRODUCT.equals(importType)){
             List<MaterialLotUnit> materialLotUnitList = requestBody.getMaterialLotUnitList();
             materialLotUnitList = gcService.validateAndSetWaferSource(importType, checkFourCodeFlag, materialLotUnitList);
             materialLotUnitList = materialLotUnitService.createMLot(materialLotUnitList);
+            importCode = CollectionUtils.isEmpty(materialLotUnitList) ? "" :materialLotUnitList.get(0).getReserved48();
+        } else if(MaterialLotUnit.COB_FINISH_PRODUCT.equals(importType) || MaterialLotUnit.COB_RAW_MATERIAL_PRODUCT.equals(importType)){
+            List<MaterialLotUnit> materialLotUnitList = requestBody.getMaterialLotUnitList();
+            materialLotUnitList = gcService.validateAndSetWaferSource(importType, checkFourCodeFlag, materialLotUnitList);
+            materialLotUnitList = materialLotUnitService.createCobMLot(materialLotUnitList);
             importCode = CollectionUtils.isEmpty(materialLotUnitList) ? "" :materialLotUnitList.get(0).getReserved48();
         } else if(MaterialLotUnit.SAMSUING_PACKING_LIST.equals(importType) || MaterialLotUnit.LCD_COG_FINISH_PRODUCT.equals(importType)
                 || MaterialLotUnit.SENSOR_RMA_GOOD_PRODUCT.equals(importType) || MaterialLotUnit.WLT_RMA_GOOD_PRODUCT.equals(importType) || MaterialLotUnit.RMA_RETURN.equals(importType) || MaterialLotUnit.RMA_PURE.equals(importType)){
@@ -65,12 +70,14 @@ public class IncomingMaterialSaveController {
             importCode = gcService.saveLCDCOGDetailList(materialLotList, importType);
         } else if(MaterialLotUnit.WLT_PACK_RETURN.equals(importType)){
             List<MaterialLotUnit> materialLotUnitList = requestBody.getMaterialLotUnitList();
+            materialLotUnitList = gcService.packReturnSetWaferSource(importType, materialLotUnitList);
             materialLotUnitList = gcService.materialLotUnitAssignEng(materialLotUnitList);
             materialLotUnitList = gcService.validateImportWltPackReturn(materialLotUnitList);
             importCode = materialLotUnitList.get(0).getReserved48();
         } else if(MaterialLotUnit.SENSOR_PACK_RETURN.equals(importType)){
             List<MaterialLotUnit> materialLotUnitList = requestBody.getMaterialLotUnitList();
             materialLotUnitList = gcService.validateAndChangeMaterialNameByImportType(materialLotUnitList, importType);
+            materialLotUnitList = gcService.packReturnSetWaferSource(importType, materialLotUnitList);
             materialLotUnitList = gcService.materialLotUnitAssignEng(materialLotUnitList);
             materialLotUnitList = gcService.createFTMaterialLotAndGetImportCode(materialLotUnitList, importType);
             importCode = materialLotUnitList.get(0).getReserved48();

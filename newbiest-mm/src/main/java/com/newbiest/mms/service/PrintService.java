@@ -1,6 +1,7 @@
 package com.newbiest.mms.service;
 
 import com.newbiest.base.exception.ClientException;
+import com.newbiest.mms.model.DocumentLine;
 import com.newbiest.mms.model.MaterialLot;
 import com.newbiest.mms.model.MaterialLotUnit;
 
@@ -20,9 +21,10 @@ public interface PrintService {
     Map<String, Object> printWltBoxLabel(MaterialLot materialLot, String printCount) throws ClientException;
     List<Map<String, Object>> printWltBboxLabel(List<MaterialLotUnit> materialLotUnitList) throws ClientException;
 
-    List<Map<String, Object>> printRmaMaterialLotLabel(List<MaterialLot> materialLotList) throws ClientException;
+    List<Map<String, Object>> printRmaMaterialLotLabel(List<MaterialLot> materialLotList, String printCount) throws ClientException;
 
     List<Map<String, Object>> printMaterialLotObliqueBoxLabel(List<MaterialLot> materialLotList, String expressNumber) throws ClientException;
+    List<Map<String, Object>>  printSamsungOuterBoxLabel(List<DocumentLine> documentLines, Integer printCount) throws ClientException;
     List<Map<String, Object>> printRwLotCstLabel(List<MaterialLot> materialLotList, String printCount) throws ClientException;
     Map<String, Object> rePrintRwLotCstLabel(MaterialLot materialLot, String printCount) throws ClientException;
     Map<String, Object> printRwCstLabel(MaterialLot materialLot, String printCount) throws ClientException;
@@ -35,7 +37,7 @@ public interface PrintService {
     List<Map<String, Object>> printBoxQRCodeLabel(MaterialLot materialLot, String printVboxLabelFlag) throws ClientException;
 
     List<Map<String, Object>> printComBoxAndCustomerLabel(MaterialLot materialLot, String subcode, String printCount) throws ClientException;
-    List<Map<String, Object>> rePrintVBxoLabel(List<Map<String, Object>> parameterMapList) throws ClientException;
+    List<Map<String, Object>> rePrintVBxoLabel(List<Map<String, Object>> parameterMapList, String labelType) throws ClientException;
 
     List<Map<String, Object>> printRawMlotIRLabel(List<MaterialLot> materialLots) throws ClientException;
     List<Map<String, Object>> printRawMlotGlueLabel(List<MaterialLot> materialLots) throws ClientException;
@@ -80,4 +82,9 @@ public interface PrintService {
     //龙腾光电物料标签
     void printLongTenMLotLabel(List<Map<String, String>> mapList) throws ClientException;
 
+    //LCD箱标签
+    List<Map<String,Object>> printLCDBoxLabel(MaterialLot materialLot, String printCount) throws ClientException;
+
+    //来料Wafer标签
+    List<Map<String,Object>> printWaferLabel(List<MaterialLotUnit> materialLotUnitList)  throws ClientException;
 }

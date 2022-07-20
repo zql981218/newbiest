@@ -4,7 +4,9 @@ import com.newbiest.base.exception.ClientException;
 import com.newbiest.base.rest.AbstractRestController;
 import com.newbiest.gc.model.StockInModel;
 import com.newbiest.gc.service.GcService;
+import com.newbiest.gc.service.ThreeSideShipService;
 import com.newbiest.mms.dto.MaterialLotAction;
+import com.newbiest.mms.model.MaterialLot;
 import com.newbiest.mms.model.MaterialLotUnit;
 import com.newbiest.mms.service.MmsService;
 import com.newbiest.msg.Request;
@@ -33,6 +35,9 @@ public class FTMLotManagerController extends AbstractRestController {
     GcService gcService;
 
     @Autowired
+    ThreeSideShipService threeSideShipService;
+
+    @Autowired
     MmsService mmsService;
 
     @ApiOperation(value = "FT来料接收、发料", notes = "接收")
@@ -54,21 +59,23 @@ public class FTMLotManagerController extends AbstractRestController {
         } else if(FTMLotManagerRequest.ACTION_TYPE_STOCK_IN.equals(actionType)){
             List<MaterialLotUnit> materialLotUnits = requestBody.getMaterialLotUnitList();
             List<StockInModel> stockInModels = requestBody.getStockInModels();
-            gcService.stockInFTWafer(materialLotUnits, stockInModels);
+            gcService.stockInFTWafer(stockInModels);
         } else if(FTMLotManagerRequest.ACTION_TYPE_QUERY_WAIT_ISSUE_UNIT.equals(actionType)){
             List<MaterialLotUnit> materialLotUnitList = gcService.queryFTWaitIssueMLotUnitList(requestBody.getTableRrn());
             responseBody.setMaterialLotUnitList(materialLotUnitList);
         } else if(FTMLotManagerRequest.ACTION_TYPE_FT_ISSUE.equals(actionType)){
             List<MaterialLotAction> materialLotActions = requestBody.getMaterialLotActions();
             gcService.validationAndWaferIssue(requestBody.getDocumentLines(), materialLotActions, requestBody.getIssueWithDoc(), requestBody.getUnPlanLot());
-        } else if(FTMLotManagerRequest.ACTION_TYPE_VALIDATE_MLOT.equals(actionType)) {
-            //暂时同WLT出货物料批次验证
-            boolean falg = gcService.validationWltStockOutMaterialLot(requestBody.getQueryMaterialLot(), requestBody.getMaterialLotActions());
-            responseBody.setFalg(falg);
         } else if(FTMLotManagerRequest.ACTION_TYPE_FT_STOCK_OUT.equals(actionType)){
-            gcService.ftStockOut(requestBody.getMaterialLotActions(), requestBody.getDocumentLines());
+            gcService.ftStockOut(requestBody.getMaterialLotActions(), requestBody.getDocumentLines(), MaterialLot.FT_STOCK_OUT_DOC_VALIDATE_RULE_ID);
         } else if(FTMLotManagerRequest.ACTION_TYPE_FT_OUTORDER_ISSUE.equals(actionType)){
             gcService.waferOutOrderIssue(requestBody.getMaterialLotActions());
+        } else if(FTMLotManagerRequest.ACTION_TYPE_SALE_SHIP.equals(actionType)){
+            threeSideShipService.ftRwMLotSaleShip(requestBody.getDocumentLines(), requestBody.getMaterialLotActions(), MaterialLot.FT_STOCK_OUT_DOC_VALIDATE_RULE_ID);
+        } else if (FTMLotManagerRequest.ACTION_TYPE_BSW_FT_STOCK_OUT.equals(actionType)){
+            gcService.ftStockOut(requestBody.getMaterialLotActions(), requestBody.getDocumentLines(), MaterialLot.BSW_FT_STOCK_OUT_DOC_VALIDATE_RULE_ID);
+        }  else if (FTMLotManagerRequest.ACTION_TYPE_BSW_SALE_SHIP.equals(actionType)){
+            threeSideShipService.ftRwMLotSaleShip(requestBody.getDocumentLines(), requestBody.getMaterialLotActions(), MaterialLot.BSW_FT_STOCK_OUT_DOC_VALIDATE_RULE_ID);
         } else {
             throw new ClientException(Request.NON_SUPPORT_ACTION_TYPE + request.getBody().getActionType());
         }

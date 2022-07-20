@@ -83,6 +83,9 @@ public class PackageServiceImpl implements PackageService{
     @Autowired
     MaterialLotUnitService materialLotUnitService;
 
+    @Autowired
+    WarehouseRepository warehouseRepository;
+
     public MaterialLotPackageType getMaterialPackageTypeByName(String name) throws ClientException{
         List<MaterialLotPackageType> packageTypes = materialLotPackageTypeRepository.findByNameAndOrgRrn(name, ThreadLocalContext.getOrgRrn());
         if (CollectionUtils.isNotEmpty(packageTypes)) {
@@ -222,9 +225,7 @@ public class PackageServiceImpl implements PackageService{
             BigDecimal packedQty = materialLotPackageType.getPackedQty(materialLotActions);
 
             packedMaterialLot.setCurrentQty(packedMaterialLot.getCurrentQty().subtract(packedQty));
-            if(!StringUtils.isNullOrEmpty(packedMaterialLot.getReserved16())){
-                packedMaterialLot.setReservedQty(packedMaterialLot.getReservedQty().subtract(packedQty));
-            }
+            packedMaterialLot.setReceiveQty(packedMaterialLot.getReceiveQty().subtract(packedQty));
             if(packedMaterialLot.getCurrentQty().compareTo(BigDecimal.ZERO) == -1){
                 throw new ClientParameterException(MmsException.MM_MATERIAL_LOT_CURRENT_QTY_LESS_THAN_ZERO, packedMaterialLot.getMaterialLotId());
             } else if (packedMaterialLot.getCurrentQty().compareTo(BigDecimal.ZERO) == 0) {
@@ -249,7 +250,7 @@ public class PackageServiceImpl implements PackageService{
             Map<String, MaterialLotAction> materialLotActionMap = materialLotActions.stream().collect(Collectors.toMap(MaterialLotAction :: getMaterialLotId, Function.identity()));
 
             Map<String, PackagedLotDetail> packagedLotDetails = packagedLotDetailRepository.findByPackagedLotRrn(packedMaterialLot.getObjectRrn()).stream().collect(Collectors.toMap(PackagedLotDetail :: getMaterialLotId, Function.identity()));
-
+            Warehouse warehouse = warehouseRepository.getOne(Long.parseLong(packedMaterialLot.getReserved13()));
             for (MaterialLot waitToUnPackageMLot : waitToUnPackageMLots) {
                 MaterialLotAction materialLotAction = materialLotActionMap.get(waitToUnPackageMLot.getMaterialLotId());
 
@@ -269,17 +270,46 @@ public class PackageServiceImpl implements PackageService{
                     waitToUnPackageMLot.setReserved9(StringUtils.EMPTY);
                     waitToUnPackageMLot.setReserved10(StringUtils.EMPTY);
                     waitToUnPackageMLot.restoreStatus();
+                    if(MaterialLot.STATUS_CREATE.equals(waitToUnPackageMLot.getStatus())){
+                        waitToUnPackageMLot.setStatusCategory(MaterialLot.STATUS_STOCK);
+                        waitToUnPackageMLot.setStatus(MaterialLot.STATUS_IN);
+                    }
+                    //拆箱恢复库存 保税属性是SH的   默认库位号  HJ AZ5000   保税属性是ZSH的   默认库位号  ZHJ AZ6000
+                    String storageId = StringUtils.EMPTY;
+                    if(MaterialLot.LOCATION_SH.equals(waitToUnPackageMLot.getReserved6())){
+                        storageId = MaterialLotInventory.SH_DEFAULT_STORAGE_ID;
+                        waitToUnPackageMLot.setReserved14(storageId);
+                    } else if(MaterialLot.BONDED_PROPERTY_ZSH.equals(waitToUnPackageMLot.getReserved6())){
+                        storageId = MaterialLotInventory.ZSH_DEFAULT_STORAGE_ID;
+                        waitToUnPackageMLot.setReserved14(storageId);
+                    }
+                    if(!StringUtils.isNullOrEmpty(storageId)){// 恢复库存数据
+                        Storage storage = mmsService.getStorageByWarehouseRrnAndName(warehouse, storageId);
+                        if(storage == null){
+                            storage = mmsService.createStorage(warehouse, storageId);
+                        }
+                        MaterialLotInventory materialLotInventory = new MaterialLotInventory();
+                        materialLotInventory.setMaterialLot(waitToUnPackageMLot).setWarehouse(warehouse).setStorage(storage);
+                        mmsService.saveMaterialLotInventory(materialLotInventory, waitToUnPackageMLot.getCurrentQty());
+                    }
+                    if(MaterialLot.COB_WAFER_SOURCE_LIST.contains(waitToUnPackageMLot.getReserved50())){
+                        waitToUnPackageMLot.setLotId(waitToUnPackageMLot.getDurable());
+                    }
                     materialLotRepository.save(waitToUnPackageMLot);
 
                     MaterialLotHistory history = (MaterialLotHistory) baseService.buildHistoryBean(waitToUnPackageMLot, MaterialLotHistory.TRANS_TYPE_UN_PACKAGE);
                     history.buildByMaterialLotAction(materialLotAction);
 
-                    if (MaterialStatusCategory.STATUS_CATEGORY_STOCK.equals(waitToUnPackageMLot.getStatusCategory()) || MaterialStatusCategory.STATUS_CATEGORY_OQC.equals(waitToUnPackageMLot.getStatusCategory())) {
+                    if (StringUtils.isNullOrEmpty(storageId) && (MaterialStatusCategory.STATUS_CATEGORY_STOCK.equals(waitToUnPackageMLot.getStatusCategory())
+                            || MaterialStatusCategory.STATUS_CATEGORY_OQC.equals(waitToUnPackageMLot.getStatusCategory()))) {
                         // 找到最后一笔包装数据
                         MaterialLotHistory materialLotHistory = materialLotHistoryRepository.findTopByMaterialLotIdAndTransTypeOrderByCreatedDesc(waitToUnPackageMLot.getMaterialLotId(), MaterialLotHistory.TRANS_TYPE_PACKAGE);
                         if (materialLotHistory != null) {
-                            Warehouse warehouse = mmsService.getWarehouseByName(materialLotHistory.getTransWarehouseId());
-                            Storage storage = mmsService.getStorageByWarehouseRrnAndName(warehouse, materialLotHistory.getTransStorageId());
+                            storageId = StringUtils.isNullOrEmpty(materialLotHistory.getTransStorageId()) ? waitToUnPackageMLot.getReserved14() : materialLotHistory.getTransStorageId();
+                            Storage storage = mmsService.getStorageByWarehouseRrnAndName(warehouse, storageId);
+                            if(storage == null){
+                                storage = mmsService.createStorage(warehouse, storageId);
+                            }
                             // 恢复库存数据
                             MaterialLotInventory materialLotInventory = new MaterialLotInventory();
                             materialLotInventory.setMaterialLot(waitToUnPackageMLot).setWarehouse(warehouse).setStorage(storage);
@@ -288,14 +318,21 @@ public class PackageServiceImpl implements PackageService{
                             history.setTargetWarehouseId(warehouse.getName());
                             history.setTransStorageId(storage.getName());
                         }
+                    } else {
+                        history.setTargetWarehouseId(warehouse.getName());
+                        history.setTransStorageId(storageId);
                     }
                     materialLotHistoryRepository.save(history);
-
                 }
                 //拆包时将晶圆的状态恢复至In状态
                 List<MaterialLotUnit> materialLotUnitList = materialLotUnitService.getUnitsByMaterialLotId(waitToUnPackageMLot.getMaterialLotId());
                 if(CollectionUtils.isNotEmpty(materialLotUnitList)){
                     for(MaterialLotUnit materialLotUnit: materialLotUnitList){
+//                        //RW(COB)的拆箱时晶圆将LotId和Durable信息还原为Lot信息
+//                        if(MaterialLot.RW_WAFER_SOURCE.equals(waitToUnPackageMLot.getReserved50())){
+//                            materialLotUnit.setLotId(waitToUnPackageMLot.getLotId());
+//                            materialLotUnit.setDurable(waitToUnPackageMLot.getDurable());
+//                        }
                         materialLotUnit.setState(MaterialLotUnit.STATE_IN);
                         materialLotUnit = materialLotUnitRepository.saveAndFlush(materialLotUnit);
 
@@ -305,9 +342,11 @@ public class PackageServiceImpl implements PackageService{
                 }
             }
 
-            //拆箱结束，如果没有全部拆完，修改箱号上的备货标记
+            //拆箱结束，如果没有全部拆完，修改箱号上的备货标记和备货数量
             List<MaterialLot> packedMaterialLots = materialLotRepository.getPackageDetailLots(packedMaterialLot.getObjectRrn());
             if(CollectionUtils.isNotEmpty(packedMaterialLots)){
+                BigDecimal totalReservedQty = packedMaterialLots.stream().collect(CollectorsUtils.summingBigDecimal(MaterialLot :: getReservedQty));
+                packedMaterialLot.setReservedQty(totalReservedQty);
                 packedMaterialLot.setReserved16(packedMaterialLots.get(0).getReserved16());
                 packedMaterialLot.setReserved17(packedMaterialLots.get(0).getReserved17());
                 packedMaterialLot.setReserved18(packedMaterialLots.get(0).getReserved18());
@@ -341,38 +380,6 @@ public class PackageServiceImpl implements PackageService{
             throw ExceptionManager.handleException(e, log);
         }
     }
-
-//    /**
-//     * 还原箱中所有备份的真空包标识并还原出库单中的备货以及未备货数量
-//     * @param materialLots
-//     */
-//    public void restoreMaterialLotAndDocLineReservedSignAndQty(List<MaterialLot> materialLots) throws ClientException{
-//        try {
-//             Map<Long, BigDecimal> docUnReservedQtyMap = Maps.newHashMap();
-//             for (MaterialLot materialLot : materialLots) {
-//                BigDecimal unReservedQty = BigDecimal.ZERO;
-//                if(!StringUtils.isNullOrEmpty(materialLot.getReserved16())){
-//                    unReservedQty = unReservedQty.add(materialLot.getReservedQty());
-//                    DocumentLine documentLine = (DocumentLine) documentLineRepository.findByObjectRrn(Long.parseLong(materialLot.getReserved16()));
-//                    documentLine.setReservedQty(documentLine.getReservedQty().subtract(unReservedQty));
-//                    documentLine.setUnReservedQty(documentLine.getUnReservedQty().add(unReservedQty));
-//                    documentLine = documentLineRepository.saveAndFlush(documentLine);
-//
-//                    DeliveryOrder deliveryOrder = (DeliveryOrder) deliveryOrderRepository.findByObjectRrn(documentLine.getDocRrn());
-//                    deliveryOrder.setUnReservedQty(deliveryOrder.getUnReservedQty().add(unReservedQty));
-//                    deliveryOrder.setReservedQty(deliveryOrder.getReservedQty().subtract(unReservedQty));
-//                    deliveryOrderRepository.save(deliveryOrder);
-//                }
-//                materialLot.setReserved16(StringUtils.EMPTY);
-//                materialLot.setReserved17(StringUtils.EMPTY);
-//                materialLot.setReserved18(StringUtils.EMPTY);
-//                materialLotRepository.save(materialLot);
-//            }
-//
-//        } catch (Exception e) {
-//            throw ExceptionManager.handleException(e, log);
-//        }
-//    }
 
     /**
      * 根据packageType验证包装规则
@@ -408,12 +415,12 @@ public class PackageServiceImpl implements PackageService{
             List<MaterialLot> materialLots = materialLotActions.stream().map(action -> mmsService.getMLotByMLotId(action.getMaterialLotId())).collect(Collectors.toList());
 
             //COB装箱只允许装一个lot，一个lot不允许超过13片
-            if(MaterialLot.COB_PACKCASE.equals(packageType)){
-                List<MaterialLotUnit> materialLotUnitList = materialLotUnitService.getUnitsByMaterialLotId(materialLots.get(0).getMaterialLotId());
-                if (materialLotUnitList.size() > MaterialLot.COB_UNIT_SIZE){
-                    throw new  ClientParameterException(MmsException.MM_MATERIAL_LOT_UNIT_SIZE_MORE_THAN_THIRTEEN, materialLots.get(0).getMaterialLotId());
-                }
-            }
+//            if(MaterialLot.COB_PACKCASE.equals(packageType)){
+//                List<MaterialLotUnit> materialLotUnitList = materialLotUnitService.getUnitsByMaterialLotId(materialLots.get(0).getMaterialLotId());
+//                if (materialLotUnitList.size() > MaterialLot.COB_UNIT_SIZE){
+//                    throw new  ClientParameterException(MmsException.MM_MATERIAL_LOT_UNIT_SIZE_MORE_THAN_THIRTEEN, materialLots.get(0).getMaterialLotId());
+//                }
+//            }
 
             //格科要求装过箱的真空包也可以再次装箱，将等待装箱的真空包按照箱号分组，先进行拆箱操作
             materialLots = getWaitPackMaterialLots(materialLots);
@@ -435,6 +442,15 @@ public class PackageServiceImpl implements PackageService{
             packedMaterialLot.setCurrentQty(materialLotPackageType.getPackedQty(materialLotActions));
             packedMaterialLot.setReceiveQty(packedMaterialLot.getCurrentQty());
             packedMaterialLot.buildPackageMaterialLot(packageType);
+            if(!MaterialLot.RW_PACKCASE.equals(packageType) && StringUtils.isNullOrEmpty(firstMaterialAction.getResetStorageId())){
+                if(MaterialLot.LOCATION_SH.equals(packedMaterialLot.getReserved6())){
+                    packedMaterialLot.setReserved14(MaterialLotInventory.SH_DEFAULT_STORAGE_ID);
+                } else if(MaterialLot.BONDED_PROPERTY_ZSH.equals(packedMaterialLot.getReserved6())){
+                    packedMaterialLot.setReserved14(MaterialLotInventory.ZSH_DEFAULT_STORAGE_ID);
+                } else {
+                    packedMaterialLot.setReserved14(StringUtils.EMPTY);
+                }
+            }
             packedMaterialLot.setMaterialType(StringUtils.isNullOrEmpty(materialLotPackageType.getTargetMaterialType()) ? packedMaterialLot.getMaterialType() : materialLotPackageType.getTargetMaterialType());
 
             BigDecimal totalCurrentSubQty = BigDecimal.ZERO;
@@ -451,6 +467,15 @@ public class PackageServiceImpl implements PackageService{
             if (!StringUtils.isNullOrEmpty(materialLots.get(0).getReserved16())) {
                 BigDecimal totalReservedQty = materialLots.stream().collect(CollectorsUtils.summingBigDecimal(MaterialLot :: getReservedQty));
                 packedMaterialLot.setReservedQty(totalReservedQty);
+            }
+            if(!StringUtils.isNullOrEmpty(firstMaterialAction.getBoxStatusUseFlag()) || !StringUtils.isNullOrEmpty(firstMaterialAction.getCobImportPack()) ){
+                packedMaterialLot.setStatusCategory(MaterialStatus.STATUS_CREATE);
+                packedMaterialLot.setStatus(MaterialStatus.STATUS_CREATE);
+            }
+            List<MaterialLot> holdMLotList = materialLots.stream().filter(materialLot -> MaterialLot.HOLD_STATE_ON.equals(materialLot.getHoldState())).collect(Collectors.toList());
+            if(CollectionUtils.isNotEmpty(holdMLotList)){
+                packedMaterialLot.setHoldState(MaterialLot.HOLD_STATE_ON);
+                packedMaterialLot.setHoldReason(holdMLotList.get(0).getHoldReason());
             }
             packedMaterialLot = materialLotRepository.saveAndFlush(packedMaterialLot);
 
@@ -530,7 +555,8 @@ public class PackageServiceImpl implements PackageService{
                                         boolean subtractQtyFlag, boolean updateParentMLotFlag) throws ClientException {
         // 对物料批次做package事件处理 扣减物料批次数量
         for (MaterialLot materialLot : waitToPackingLot) {
-//            materialLot.clearPackedMaterialLot();
+            materialLot.setReserved8(packedMaterialLot.getReserved8());
+            materialLot.setReserved14(packedMaterialLot.getReserved14());
 
             String materialLotId = materialLot.getMaterialLotId();
             MaterialLotAction materialLotAction = materialLotActions.stream().filter(action -> materialLotId.equals(action.getMaterialLotId())).findFirst().get();
@@ -545,7 +571,15 @@ public class PackageServiceImpl implements PackageService{
                     materialLot.setParentMaterialLotId(packedMaterialLot.getMaterialLotId());
                     materialLot.setParentMaterialLotRrn(packedMaterialLot.getObjectRrn());
                 }
-                materialLot = mmsService.changeMaterialLotState(materialLot, MaterialEvent.EVENT_PACKAGE, MaterialStatus.STATUS_PACKED);
+                if(MaterialLot.COB_WAFER_SOURCE_LIST.contains(materialLot.getReserved50())){
+                    materialLot.setLotId(materialLot.getParentMaterialLotId());
+                }
+                //格科客制化，cob导入装箱 不改变箱中Lot装箱，保持Create
+                if(!StringUtils.isNullOrEmpty(materialLotAction.getCobImportPack()) || !StringUtils.isNullOrEmpty(materialLotAction.getBoxStatusUseFlag()) ){
+                    materialLot = materialLotRepository.saveAndFlush(materialLot);
+                } else {
+                    materialLot = mmsService.changeMaterialLotState(materialLot, MaterialEvent.EVENT_PACKAGE, MaterialStatus.STATUS_PACKED);
+                }
             }
 
             // 记录包装详情
@@ -587,9 +621,13 @@ public class PackageServiceImpl implements PackageService{
                     //RW(COB)的装箱晶圆将箱号记录到lotId栏位，LotId信息记录到Durable栏位上
                     if(MaterialLot.RW_WAFER_SOURCE.equals(materialLot.getReserved50())){
                         materialLotUnit.setLotId(materialLot.getParentMaterialLotId());
-                        materialLotUnit.setDurable(materialLot.getLotId());
+                        materialLotUnit.setDurable(materialLot.getDurable());
                     }
-                    materialLotUnit.setState(MaterialLotUnit.STATE_PACKAGE);
+                    if(!StringUtils.isNullOrEmpty(materialLotAction.getCobImportPack()) || !StringUtils.isNullOrEmpty(materialLotAction.getBoxStatusUseFlag()) ) {
+                        materialLotUnit.setState(MaterialLotUnit.STATE_CREATE);
+                    } else {
+                        materialLotUnit.setState(MaterialLotUnit.STATE_PACKAGE);
+                    }
                     materialLotUnit = materialLotUnitRepository.saveAndFlush(materialLotUnit);
 
                     MaterialLotUnitHistory unitHistory = (MaterialLotUnitHistory) baseService.buildHistoryBean(materialLotUnit, MaterialLotHistory.TRANS_TYPE_PACKAGE);

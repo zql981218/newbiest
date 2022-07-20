@@ -46,4 +46,7 @@ public class MaterialEvent extends Event {
 
     public static final String EVENT_UN_CHECK = "UnCheck";
 
+    public static final String EVENT_BOX_RECEIVE = "BoxReceive";
+
+    public static final String EVENT_PACK_LOT_RECEIVE = "PackLotReceive";//装箱Lot接收
 }

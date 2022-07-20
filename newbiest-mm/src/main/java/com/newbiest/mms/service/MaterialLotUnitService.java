@@ -26,4 +26,6 @@ public interface MaterialLotUnitService {
     void validateAndCreateMLotUnit(List<MaterialLotUnit> materialLotUnitList) throws ClientException;
 
     List<MaterialLotUnit> getMaterialLotUnitByFabLotAndWaferId(List<MaterialLotUnit> materialLotUnitList, String importType) throws ClientException;
+
+    List<MaterialLotUnit> createCobMLot(List<MaterialLotUnit> materialLotUnitList) throws ClientException;
 }

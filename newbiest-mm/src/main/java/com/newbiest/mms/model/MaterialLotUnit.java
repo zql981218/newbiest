@@ -24,6 +24,17 @@ public class MaterialLotUnit extends NBUpdatable {
 
     //三星等级
     public static final String SAMSUING_GRADE = "A";
+    public static final String COB_RETURN_MATERIAL_IMPORT = "COB_RETURN_MATERIAL";
+
+    //封装回货特殊产品型号校验
+    public static final String RETURN_PRODUCT_ID = "GC02M1-3";
+    public static final String RETURN_RESET_PRODUCT_ID = "GC02M1C-3";
+    public static final String FAB_LOT_ID_C = "C";
+    public static final String FAB_DEVICE_ID_H00 = "H00";
+    public static final String FAB_LOT_ID_A = "A";
+    public static final String FAB_DEVICE_ID_C000 = "C000";
+    public static final String FAB_LOT_ID_E = "E";
+    public static final String FAB_DEVICE_ID_P018L = "P018L";
 
     public static final String MAIN_GRADE = "MAIN";
 
@@ -85,7 +96,6 @@ public class MaterialLotUnit extends NBUpdatable {
     public static final String PRODUCT_CATEGORY_LCP = "LCP";
     public static final String PRODUCT_CATEGORY_SCP = "SCP";
     public static final String PRODUCT_CATEGORY_FT = "FT";
-    public static final String PRODUCT_CATEGORY_WLFT = "WLFT";
     public static final String PRODUCT_CATEGORY_FT_COB = "COB";
     public static final String PRODUCT_CATEGORY_RW = "RW";
     public static final String PRODUCT_CATEGORY_SOC = "SOC";

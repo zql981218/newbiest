@@ -27,6 +27,7 @@ import com.newbiest.mms.repository.*;
 import com.newbiest.mms.service.MaterialLotUnitService;
 import com.newbiest.mms.service.MmsService;
 import com.newbiest.mms.state.model.MaterialEvent;
+import com.newbiest.mms.state.model.MaterialStatus;
 import com.newbiest.mms.state.model.MaterialStatusModel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -495,7 +496,7 @@ public class MmsServiceImpl implements MmsService {
      * 获取默认的库位。这个库位可以挂在任意仓库下面
      *  如果系统中没有默认库位则直接创建一个
      */
-    private Storage getDefaultStorage(Warehouse warehouse) throws ClientException{
+    public Storage getDefaultStorage(Warehouse warehouse) throws ClientException{
         try {
             Storage storage = getStorageByWarehouseRrnAndName(warehouse, Storage.DEFAULT_STORAGE_NAME);
             if (storage == null) {
@@ -511,6 +512,29 @@ public class MmsServiceImpl implements MmsService {
         }
     }
 
+    /**
+     * 新增库位
+     * @param warehouse
+     * @param storageId
+     * @throws ClientException
+     */
+    public Storage createStorage(Warehouse warehouse, String storageId) throws ClientException{
+        try {
+            Storage targetStorage = new Storage();
+            if (SystemPropertyUtils.getAutoCreateStorageFlag()) {
+                targetStorage = new Storage();
+                targetStorage.setName(storageId);
+                targetStorage.setDescription(StringUtils.SYSTEM_CREATE);
+                targetStorage.setWarehouseRrn(warehouse.getObjectRrn());
+                targetStorage = storageRepository.saveAndFlush(targetStorage);
+            } else {
+                throw new ClientParameterException(MmsException.MM_STORAGE_IS_NOT_EXIST, storageId);
+            }
+            return targetStorage;
+        } catch (Exception e){
+            throw ExceptionManager.handleException(e, log);
+        }
+    }
 
     /**
      * 根据Action上目标库位进行返回库位信息，如果没有指定库位则返回默认库位
@@ -518,7 +542,7 @@ public class MmsServiceImpl implements MmsService {
      * @param warehouse
      * @return
      */
-    private Storage getTargetStorageByMaterialLotAction(MaterialLotAction materialLotAction, @NotNull  Warehouse warehouse) {
+    public Storage getTargetStorageByMaterialLotAction(MaterialLotAction materialLotAction, @NotNull  Warehouse warehouse) {
         try {
             Storage targetStorage;
             if (materialLotAction.getTargetStorageRrn() != null) {
@@ -574,14 +598,25 @@ public class MmsServiceImpl implements MmsService {
      * @param materialLotAction 动作需要包含目标仓库以及数量
      * @return
      */
-    private MaterialLot stockIn(MaterialLot materialLot, String eventId, MaterialLotAction materialLotAction) throws ClientException {
+    public MaterialLot stockIn(MaterialLot materialLot, String eventId, MaterialLotAction materialLotAction) throws ClientException {
         try {
             SessionContext sc = ThreadLocalContext.getSessionContext();
             sc.buildTransInfo();
 
             PreConditionalUtils.checkNotNull(materialLotAction.getTargetWarehouseRrn(), "TargetWarehouseRrn");
-            Warehouse targetWarehouse = (Warehouse) warehouseRepository.findByObjectRrn(materialLotAction.getTargetWarehouseRrn());
-            Storage targetStorage = getTargetStorageByMaterialLotAction(materialLotAction, targetWarehouse);
+            Warehouse targetWarehouse = null;
+            Storage targetStorage = null;
+            if(materialLotAction.getWarehouse() != null){
+                targetWarehouse = materialLotAction.getWarehouse();
+            } else {
+                targetWarehouse = (Warehouse) warehouseRepository.findByObjectRrn(materialLotAction.getTargetWarehouseRrn());
+            }
+
+            if(materialLotAction.getStorage() != null){
+                targetStorage = materialLotAction.getStorage();
+            } else {
+                targetStorage = getTargetStorageByMaterialLotAction(materialLotAction, targetWarehouse);
+            }
 
             MaterialLotInventory materialLotInventory = getMaterialLotInv(materialLot.getObjectRrn(), targetWarehouse.getObjectRrn(), targetStorage.getObjectRrn());
             if (materialLotInventory != null) {
@@ -589,9 +624,32 @@ public class MmsServiceImpl implements MmsService {
             }
             materialLot.setCurrentSubQty(materialLotAction.getTransCount());
             // 变更物料库存并改变物料批次状态
+            //如果箱号做接收，修改箱号状态，以及箱中真空包的状态
             saveMaterialLotInventory(materialLot, targetWarehouse, targetStorage, materialLotAction.getTransQty());
+            if(MaterialStatus.STATUS_CREATE.equals(materialLot.getStatus())){
+                materialLot.setReceiveDate(new Date());
+            }
+            if(!StringUtils.isNullOrEmpty(materialLot.getPackageType()) && MaterialStatus.STATUS_CREATE.equals(materialLot.getStatus())){
+                changeMaterialLotState(materialLot, MaterialEvent.EVENT_BOX_RECEIVE, StringUtils.EMPTY);
+                List<MaterialLot> materialLotList = materialLotRepository.getPackageDetailLots(materialLot.getObjectRrn());
+                for(MaterialLot packedLot : materialLotList){
+                    packedLot.setReserved8(materialLot.getReserved8());
+                    packedLot.setReserved14(materialLot.getReserved14());
+                    packedLot.setReserved2(null);
+                    packedLot.setReceiveDate(new Date());
+                    if(MaterialStatus.STATUS_CREATE.equals(packedLot.getStatus())){
+                        packedLot = changeMaterialLotState(packedLot, MaterialEvent.EVENT_PACK_LOT_RECEIVE, StringUtils.EMPTY);
+                    } else {
+                        packedLot = materialLotRepository.saveAndFlush(packedLot);
+                    }
 
-            changeMaterialLotState(materialLot, eventId, StringUtils.EMPTY);
+                    MaterialLotHistory history = (MaterialLotHistory) baseService.buildHistoryBean(packedLot, MaterialLotHistory.TRANS_TYPE_STOCK_IN);
+                    materialLotHistoryRepository.save(history);
+                    stockInMaterialLotUnitAndSaveHis(packedLot);
+                }
+            } else {
+                changeMaterialLotState(materialLot, eventId, StringUtils.EMPTY);
+            }
 
             MaterialLotHistory history = (MaterialLotHistory) baseService.buildHistoryBean(materialLot, MaterialLotHistory.TRANS_TYPE_STOCK_IN);
             history.buildByMaterialLotAction(materialLotAction);
@@ -866,7 +924,10 @@ public class MmsServiceImpl implements MmsService {
 
             MaterialLotHistory history = (MaterialLotHistory) baseService.buildHistoryBean(materialLot, MaterialLotHistory.TRANS_TYPE_HOLD);
             history.buildByMaterialLotAction(materialLotAction);
-            materialLotHistoryRepository.save(history);
+            MaterialLotHistory his = materialLotHistoryRepository.save(history);
+            if (materialLotAction.getTransUser() != null){
+                materialLotHistoryRepository.updateCreatedByAndUpdatedByObjectRrn(materialLotAction.getTransUser(), materialLotAction.getTransUser(), his.getObjectRrn());
+            }
             return materialLot;
         } catch (Exception e) {
             throw ExceptionManager.handleException(e, log);
@@ -1013,7 +1074,12 @@ public class MmsServiceImpl implements MmsService {
      */
     public MaterialLot receiveMLot(Material material, String mLotId, MaterialLotAction materialLotAction) {
         try {
-            StatusModel statusModel = getMaterialStatusModel(material);
+            StatusModel statusModel;
+            if(material.getStatusModelRrn() != null){
+                statusModel = statusMachineService.getStatusModelByObjectRrn(material.getStatusModelRrn());
+            } else {
+                statusModel = getMaterialStatusModel(material);
+            }
             materialLotAction.setMaterialLotId(mLotId);
             MaterialLot materialLot = createMLot(material, statusModel, materialLotAction);
             materialLot = changeMaterialLotState(materialLot, MaterialEvent.EVENT_RECEIVE, StringUtils.EMPTY);
@@ -1160,19 +1226,21 @@ public class MmsServiceImpl implements MmsService {
     /**
      * 晶圆接收入库操作
      * @param materialLot
-     * @param transType
      * @throws ClientException
      */
-    public void stockInMaterialLotUnitAndSaveHis(MaterialLot materialLot, String transType) throws ClientException{
+    public void stockInMaterialLotUnitAndSaveHis(MaterialLot materialLot) throws ClientException{
         try {
             List<MaterialLotUnit> materialLotUnits = materialLotUnitRepository.findByMaterialLotId(materialLot.getMaterialLotId());
             for (MaterialLotUnit materialLotUnit : materialLotUnits) {
-                materialLotUnit.setState(MaterialLotUnit.STATE_IN);
+                if(!StringUtils.isNullOrEmpty(materialLot.getParentMaterialLotId())){
+                    materialLotUnit.setState(MaterialStatus.STATUS_PACKAGE);
+                } else {
+                    materialLotUnit.setState(MaterialLotUnit.STATE_IN);
+                }
                 materialLotUnit = materialLotUnitRepository.saveAndFlush(materialLotUnit);
 
                 MaterialLotUnitHistory history = (MaterialLotUnitHistory) baseService.buildHistoryBean(materialLotUnit, MaterialLotUnitHistory.TRANS_TYPE_IN);
                 materialLotUnitHisRepository.save(history);
-                log.info("received materialLotUnit is " + materialLotUnit);
             }
         } catch (Exception e){
             throw ExceptionManager.handleException(e, log);
@@ -1213,6 +1281,7 @@ public class MmsServiceImpl implements MmsService {
                         if(MaterialLot.HOLD_STATE_OFF.equals(materialLot.getHoldState())) {
                             MaterialLotAction materialLotAction = new MaterialLotAction();
                             materialLotAction.setActionReason(gcFutureHoldConfig.getHoldReason());
+                            materialLotAction.setTransUser(gcFutureHoldConfig.getUpdatedBy());
                             holdMaterialLot(materialLot, materialLotAction);
                         }
                     }
@@ -1245,6 +1314,7 @@ public class MmsServiceImpl implements MmsService {
                 if(MaterialLot.HOLD_STATE_OFF.equals(materialLot.getHoldState())){
                     MaterialLotAction materialLotAction = new MaterialLotAction();
                     materialLotAction.setActionReason(waferHoldRelation.getHoldReason());
+                    materialLotAction.setTransUser(waferHoldRelation.getUpdatedBy());
                     holdMaterialLot(materialLot, materialLotAction);
                 }
 

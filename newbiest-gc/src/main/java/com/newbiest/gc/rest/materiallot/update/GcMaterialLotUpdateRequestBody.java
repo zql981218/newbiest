@@ -41,4 +41,10 @@ public class GcMaterialLotUpdateRequestBody extends RequestBody {
 
 	@ApiModelProperty("物料批次")
 	private MaterialLot materialLot;
+
+	@ApiModelProperty("MRB结论备注")
+	private String mrbComments;
+
+	@ApiModelProperty("Hold Type")
+	private String holdType;
 }

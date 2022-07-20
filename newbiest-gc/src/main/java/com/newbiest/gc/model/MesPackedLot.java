@@ -1,6 +1,7 @@
 package com.newbiest.gc.model;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.google.common.collect.Lists;
 import com.newbiest.base.model.NBUpdatable;
 import com.newbiest.base.utils.DateUtils;
 import lombok.Data;
@@ -8,6 +9,7 @@ import lombok.Data;
 import javax.persistence.*;
 import java.io.Serializable;
 import java.util.Date;
+import java.util.List;
 
 /**
  * Glaxycore 的Mes已经包装好的批次别名
@@ -22,7 +24,7 @@ public class MesPackedLot implements Serializable {
     public static final String PACKED_STATUS_IN = "IN";
 
     public static final String PRODUCT_CATEGORY_FT = "FT";
-    public static final String PRODUCT_CATEGORY_WLFT = "WLFT";
+    public static final String PRODUCT_CATEGORY_RW = "RW";
     public static final String PRODUCT_CATEGORY_WLT = "WLT";
     public static final String PRODUCT_CATEGORY_CP = "CP";
     public static final String PRODUCT_CATEGORY_COM = "COM";
@@ -30,6 +32,7 @@ public class MesPackedLot implements Serializable {
     public static final String PRODUCT_CATEGORY_LCP = "LCP";
     public static final String PRODUCT_CATEGORY_SCP = "SCP";
     public static final String PRODUCT_CATEGORY_COB = "COB";
+    public static final List<String> VBOX_CATEGORY_LIST = Lists.newArrayList(PRODUCT_CATEGORY_FT, PRODUCT_CATEGORY_COM, PRODUCT_CATEGORY_COB);
 
     public static final String REPLACE_FLAG = "true";
 
@@ -55,6 +58,9 @@ public class MesPackedLot implements Serializable {
 
     @Column(name = "BOX_ID")
     private String boxId;
+
+    @Column(name = "CREATED")
+    private Date created;
 
     @Column(name = "PRODUCT_ID")
     private String productId;
@@ -240,22 +246,88 @@ public class MesPackedLot implements Serializable {
     private String vender;
 
     /**
-     * 供应商
+     * 原Lot昊
      */
-    @Transient
+    @Column(name = "SOURCE_LOT_ID")
+    private String sourceLotId;
+
+    /**
+     * 产品分类
+     */
+    @Column(name = "PRODUCT_TYPE")
+    private String productType;
+
+    /**
+     * 发料产品型号
+     */
+    @Column(name = "MATERIAL_NAME")
+    private String materialName;
+
+    /**
+     * 来料发料等级
+     */
+    @Column(name = "ISSUE_GRADE")
+    private String issueGrade;
+
+    /**
+     * 来料发料二级代码
+     */
+    @Column(name = "SUBCODE")
+    private String subcode;
+
+    /**
+     * 来料发料保税属性
+     */
+    @Column(name = "ISSUE_LOCATION")
+    private String issueLocation;
+
+    /**
+     * 来料发料类别
+     */
+    @Column(name = "CATEGORY")
+    private String category;
+
+    /**
+     * 来料发料仓库
+     */
+    @Column(name = "WAREHOUSE_ID")
+    private String warehouseId;
+
+    /**
+     * 来料发料reserved22
+     */
+    @Column(name = "SUB_NAME")
     private String subName;
 
     /**
-     * FAB_DEVICE
+     * 来料发料reserved23
      */
-    @Transient
+    @Column(name = "SHIP_TO")
+    private String shipTo;
+
+    /**
+     * 来料发料reserved24
+     */
+    @Column(name = "FAB_DEVICE")
     private String fabDevice;
 
     /**
-     * PRODUCT_TYPE
+     * 来料发料reserved25
      */
-    @Transient
-    private String productType;
+    @Column(name = "LOT_TYPE")
+    private String lotType;
+
+    /**
+     * 来料发料reserved49
+     */
+    @Column(name = "TEST_SOURCE")
+    private String testSource;
+
+    /**
+     * 来料发料reserved50
+     */
+    @Column(name = "WAFER_SOURCE")
+    private String waferSource;
 
     /**
      * IMPORT_TYPE
